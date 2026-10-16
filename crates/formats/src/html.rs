@@ -242,6 +242,20 @@ pub fn decode_entity(name: &str) -> Option<String> {
         "Phi" => 'Φ',
         "Psi" => 'Ψ',
         "Omega" => 'Ω',
+        "lowast" => '∗',
+        "Alpha" => 'Α',
+        "Beta" => 'Β',
+        "Epsilon" => 'Ε',
+        "Zeta" => 'Ζ',
+        "Eta" => 'Η',
+        "Iota" => 'Ι',
+        "Kappa" => 'Κ',
+        "Mu" => 'Μ',
+        "Nu" => 'Ν',
+        "Omicron" => 'Ο',
+        "Rho" => 'Ρ',
+        "Tau" => 'Τ',
+        "Chi" => 'Χ',
         "zwj" => '\u{200D}',
         "zwnj" => '\u{200C}',
         _ => return None,
@@ -456,7 +470,7 @@ impl Lexer<'_> {
                     }
                     _ => {
                         let v0 = i;
-                        while b.get(i).is_some_and(|c| !c.is_ascii_whitespace() && *c != b'>') {
+                        while b.get(i).is_some_and(|c| !c.is_ascii_whitespace() && *c != b'>' && !(*c == b'/' && b.get(i + 1) == Some(&b'>'))) {
                             i += 1;
                         }
                         val = unescape(rest.get(v0..i).unwrap_or(""));
@@ -1963,6 +1977,7 @@ mod tests {
         assert_eq!(unescape("a &lt;b&gt; &#65;&#x42; &bogus; &"), "a <b> AB &bogus; &");
         assert_eq!(unescape("&minus; &COPY; &EURO; &TRADE; &frac12; &frac34;"), "− © € ™ ½ ¾");
         assert_eq!(unescape("&theta; &lambda; &Delta; &nabla; &sum; &radic; &ne; &le; &ge; &hearts;"), "θ λ Δ ∇ ∑ √ ≠ ≤ ≥ ♥");
+        assert_eq!(unescape("&minus; &plusmn; &Delta; &alpha; &APOS; &radic;"), "− ± Δ α ' √");
     }
 
     #[test]
@@ -2045,5 +2060,28 @@ mod tests {
         assert!(!html.contains("<p> lead"), "{html}");
         let back = import(&html);
         assert_eq!(back.plain_text(Default::default()).replace('\u{a0}', " "), " lead");
+    }
+
+    #[test]
+    fn unquoted_attribute_self_closing_tag() {
+        let mut lx = Lexer { s: "<img src=foo.png/><script src=bar.js/><p>Hello</p>", pos: 0 };
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "img");
+                assert_eq!(attrs, vec![("src".into(), "foo.png".into())]);
+                assert!(self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "script");
+                assert_eq!(attrs, vec![("src".into(), "bar.js".into())]);
+                assert!(self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+        let f = parse("<script src=test.js/><p>Kept text</p>");
+        assert_eq!(texts(&f), vec!["NormalNone:Kept text"]);
     }
 }
