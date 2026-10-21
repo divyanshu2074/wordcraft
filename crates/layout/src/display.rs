@@ -775,12 +775,12 @@ fn lines(
                 continue;
             }
             if let Some((ob, x0, x1)) = open.take() {
-                char_box(&ob, x0, x1, text_top, text_bottom, alpha, out);
+                char_box(&ob, x0, x1, top, bottom, alpha, out);
             }
             open = b.map(|b| (b, x + cx, x + nx));
         }
         if let Some((ob, x0, x1)) = open {
-            char_box(&ob, x0, x1, text_top, text_bottom, alpha, out);
+            char_box(&ob, x0, x1, top, bottom, alpha, out);
         }
         // Label.
         if li == pl.label_line()
