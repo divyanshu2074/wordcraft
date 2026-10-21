@@ -253,6 +253,7 @@ pub fn decode_entity(name: &str) -> Option<String> {
         "Mu" => 'Μ',
         "Nu" => 'Ν',
         "Omicron" => 'Ο',
+        "omicron" => 'ο',
         "Rho" => 'Ρ',
         "Tau" => 'Τ',
         "Chi" => 'Χ',
@@ -328,6 +329,41 @@ enum Tok {
     Text(String),
     Start { name: String, attrs: Vec<(String, String)>, self_close: bool },
     End(String),
+}
+
+/// Whether an unquoted attribute value ending in `/` followed by `>` is an ordinary HTML
+/// path or URL with a trailing slash, rather than a self-closing tag delimiter.
+fn is_trailing_slash_path_or_url(val_with_slash: &str, tag_name: &str, attr_name: &str) -> bool {
+    if !val_with_slash.ends_with('/') {
+        return false;
+    }
+    // Full URLs (e.g. http://example.com/, https://site.org/dir/).
+    if val_with_slash.contains("://") {
+        return true;
+    }
+    let stem = &val_with_slash[..val_with_slash.len() - 1];
+    // Absolute paths (e.g. /docs/, /assets/, /).
+    if val_with_slash.starts_with('/') {
+        let last_segment = stem.rsplit('/').next().unwrap_or(stem);
+        return !has_file_extension(last_segment);
+    }
+    // Relative paths with directory segments (e.g. dir/subdir/, ./folder/).
+    if stem.contains('/') {
+        let last_segment = stem.rsplit('/').next().unwrap_or(stem);
+        return !has_file_extension(last_segment);
+    }
+    // Non-void link attributes (e.g. <a href=docs/>).
+    if tag_name == "a" && attr_name == "href" {
+        return true;
+    }
+    false
+}
+
+fn has_file_extension(segment: &str) -> bool {
+    let Some((_, ext)) = segment.rsplit_once('.') else {
+        return false;
+    };
+    !ext.is_empty() && ext.len() <= 5 && ext.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
 struct Lexer<'a> {
@@ -470,10 +506,14 @@ impl Lexer<'_> {
                     }
                     _ => {
                         let v0 = i;
-                        while b.get(i).is_some_and(|c| !c.is_ascii_whitespace() && *c != b'>' && !(*c == b'/' && b.get(i + 1) == Some(&b'>'))) {
+                        while b.get(i).is_some_and(|c| !c.is_ascii_whitespace() && *c != b'>') {
                             i += 1;
                         }
                         val = unescape(rest.get(v0..i).unwrap_or(""));
+                        if val.ends_with('/') && b.get(i) == Some(&b'>') && !is_trailing_slash_path_or_url(&val, &name, &an) {
+                            val.pop();
+                            self_close = true;
+                        }
                     }
                 }
             }
@@ -1977,7 +2017,7 @@ mod tests {
         assert_eq!(unescape("a &lt;b&gt; &#65;&#x42; &bogus; &"), "a <b> AB &bogus; &");
         assert_eq!(unescape("&minus; &COPY; &EURO; &TRADE; &frac12; &frac34;"), "− © € ™ ½ ¾");
         assert_eq!(unescape("&theta; &lambda; &Delta; &nabla; &sum; &radic; &ne; &le; &ge; &hearts;"), "θ λ Δ ∇ ∑ √ ≠ ≤ ≥ ♥");
-        assert_eq!(unescape("&minus; &plusmn; &Delta; &alpha; &APOS; &radic;"), "− ± Δ α ' √");
+        assert_eq!(unescape("&minus; &plusmn; &Delta; &alpha; &APOS; &radic; &omicron; &Omicron; &lowast;"), "− ± Δ α ' √ ο Ο ∗");
     }
 
     #[test]
@@ -2083,5 +2123,65 @@ mod tests {
         }
         let f = parse("<script src=test.js/><p>Kept text</p>");
         assert_eq!(texts(&f), vec!["NormalNone:Kept text"]);
+    }
+
+    #[test]
+    fn unquoted_attribute_trailing_slash_path_and_url() {
+        let mut lx =
+            Lexer { s: "<a href=/docs/><img src=/assets/><a href=https://example.com/><a href=path/dir/><img src=/images/pic.png/>", pos: 0 };
+        // <a href=/docs/>: trailing slash preserved, not self-closing
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "a");
+                assert_eq!(attrs, vec![("href".into(), "/docs/".into())]);
+                assert!(!self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+        // <img src=/assets/>: directory path trailing slash preserved, not self-closing
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "img");
+                assert_eq!(attrs, vec![("src".into(), "/assets/".into())]);
+                assert!(!self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+        // <a href=https://example.com/>: URL with trailing slash preserved
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "a");
+                assert_eq!(attrs, vec![("href".into(), "https://example.com/".into())]);
+                assert!(!self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+        // <a href=path/dir/>: relative directory path with trailing slash preserved
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "a");
+                assert_eq!(attrs, vec![("href".into(), "path/dir/".into())]);
+                assert!(!self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+        // <img src=/images/pic.png/>: file extension before slash -> self-closing
+        match lx.next().unwrap() {
+            Tok::Start { name, attrs, self_close } => {
+                assert_eq!(name, "img");
+                assert_eq!(attrs, vec![("src".into(), "/images/pic.png".into())]);
+                assert!(self_close);
+            }
+            other => panic!("expected Start, got {other:?}"),
+        }
+
+        // Full document parse preserves link URL with trailing slash
+        let f = parse("<a href=/docs/>Documentation</a>");
+        assert_eq!(texts(&f), vec!["NormalNone:Documentation"]);
+        let Some(FBlock::Para(p)) = f.blocks.first() else { panic!("expected para") };
+        assert_eq!(p.inlines.len(), 1);
+        let Inline::Text(t, fmt) = &p.inlines[0] else { panic!("expected text inline") };
+        assert_eq!(t, "Documentation");
+        assert_eq!(fmt.link.as_deref(), Some("/docs/"));
     }
 }
