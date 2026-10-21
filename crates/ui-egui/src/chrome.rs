@@ -655,9 +655,8 @@ impl WordApp {
 /// Does `lang` name Chinese (Simplified or Traditional)?
 pub(crate) fn is_chinese(lang: Option<&str>) -> bool {
     let Some(tag) = lang else { return false };
-    let tag = tag.trim();
-    tag.eq_ignore_ascii_case("zh")
-        || (tag.len() >= 3 && tag[..2].eq_ignore_ascii_case("zh") && (tag.as_bytes()[2] == b'-' || tag.as_bytes()[2] == b'_'))
+    let bytes = tag.trim().as_bytes();
+    bytes.eq_ignore_ascii_case(b"zh") || (bytes.len() >= 3 && bytes[..2].eq_ignore_ascii_case(b"zh") && (bytes[2] == b'-' || bytes[2] == b'_'))
 }
 
 /// Should document length default to characters (excluding spaces) instead of words?
@@ -899,5 +898,14 @@ mod tests {
         let a_en = WordApp::new(wordcraft_engine::Session::new(english_doc), crate::Services::default());
         assert!(!is_chinese_doc(&a_en));
         assert_eq!(a_en.session.word_count(), 6);
+
+        // Language tag parsing handles valid Chinese tags and multi-byte non-ASCII safely without panicking.
+        assert!(is_chinese(Some("zh")));
+        assert!(is_chinese(Some("zh-CN")));
+        assert!(is_chinese(Some("ZH_TW")));
+        assert!(is_chinese(Some("zh-Hans")));
+        assert!(!is_chinese(Some("en")));
+        assert!(!is_chinese(Some("中文")));
+        assert!(!is_chinese(None));
     }
 }
