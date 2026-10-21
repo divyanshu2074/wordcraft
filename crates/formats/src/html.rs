@@ -337,11 +337,20 @@ fn is_trailing_slash_path_or_url(val_with_slash: &str, tag_name: &str, attr_name
     if !val_with_slash.ends_with('/') {
         return false;
     }
+    let stem = &val_with_slash[..val_with_slash.len() - 1];
     // Full URLs (e.g. http://example.com/, https://site.org/dir/).
-    if val_with_slash.contains("://") {
+    // A URL whose path ends in a filename with an extension (e.g. http://example.com/app.js/)
+    // is a self-closing tag with a filename, not a trailing-slash directory URL.
+    if let Some((_, after_scheme)) = val_with_slash.split_once("://") {
+        if let Some((_host, path_with_slash)) = after_scheme.split_once('/') {
+            let path_stem = &path_with_slash[..path_with_slash.len().saturating_sub(1)];
+            let last_segment = path_stem.rsplit('/').next().unwrap_or(path_stem);
+            if !last_segment.is_empty() && has_file_extension(last_segment) {
+                return false;
+            }
+        }
         return true;
     }
-    let stem = &val_with_slash[..val_with_slash.len() - 1];
     // Absolute paths (e.g. /docs/, /assets/, /).
     if val_with_slash.starts_with('/') {
         let last_segment = stem.rsplit('/').next().unwrap_or(stem);
@@ -509,8 +518,9 @@ impl Lexer<'_> {
                         while b.get(i).is_some_and(|c| !c.is_ascii_whitespace() && *c != b'>') {
                             i += 1;
                         }
-                        val = unescape(rest.get(v0..i).unwrap_or(""));
-                        if val.ends_with('/') && b.get(i) == Some(&b'>') && !is_trailing_slash_path_or_url(&val, &name, &an) {
+                        let raw_val = rest.get(v0..i).unwrap_or("");
+                        val = unescape(raw_val);
+                        if raw_val.ends_with('/') && b.get(i) == Some(&b'>') && !is_trailing_slash_path_or_url(&val, &name, &an) {
                             val.pop();
                             self_close = true;
                         }
@@ -2123,6 +2133,14 @@ mod tests {
         }
         let f = parse("<script src=test.js/><p>Kept text</p>");
         assert_eq!(texts(&f), vec!["NormalNone:Kept text"]);
+
+        // Full URL with filename extension before closing slash -> self-closing
+        let f2 = parse("<script src=https://example.com/app.js/><p>Hello</p>");
+        assert_eq!(texts(&f2), vec!["NormalNone:Hello"]);
+
+        // Decoded entity &#47; is not a literal slash delimiter -> not self-closing (script consumes following content)
+        let f3 = parse("<script src=app.js&#47;><p>Hello</p>");
+        assert!(texts(&f3).is_empty());
     }
 
     #[test]
