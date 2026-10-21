@@ -884,7 +884,7 @@ mod tests {
     /// English documents continue displaying word count.
     #[test]
     fn chinese_documents_default_to_character_count_in_status_bar() {
-        let mut d = wordcraft_doc::Document::from_text("这是一篇测试文章。今天天气真好。");
+        let mut d = wordcraft_doc::Document::from_text("这是一篇测试文章\u{3002}今天天气真好\u{3002}");
         d.styles.default_chr.lang = Some("zh-CN".into());
         let mut a = WordApp::new(wordcraft_engine::Session::new(d), crate::Services::default());
         assert!(is_chinese_doc(&a));
