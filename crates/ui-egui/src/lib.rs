@@ -5388,7 +5388,7 @@ mod tests {
     #[test]
     fn home_tab_and_chrome_controls_name_themselves_for_a_screen_reader() {
         use egui::accesskit::Role;
-        use egui_kittest::kittest::Queryable;
+        use egui_kittest::kittest::{NodeT, Queryable};
         let mut a = app();
         a.run("file.new", json!({"template": "sample"})).unwrap();
         let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
@@ -5408,7 +5408,7 @@ mod tests {
             (Role::Button, "Undo"),
             (Role::Button, "Redo"),
             (Role::Button, "Customize Quick Access Toolbar"),
-            (Role::TextInput, "Search"),
+            (Role::Button, "Search commands and help"),
             (Role::Button, "Clipboard settings"),
             (Role::TextInput, "Font"),
             (Role::TextInput, "Font Size"),
@@ -5429,6 +5429,17 @@ mod tests {
         ] {
             assert!(h.query_by_role_and_label(role, name).is_some(), "nothing on the interface is called {name:?}");
         }
+
+        let autosave = h.get_by_role_and_label(Role::CheckBox, "AutoSave");
+        assert_eq!(autosave.accesskit_node().toggled(), Some(egui::accesskit::Toggled::False));
+
+        let p = Some(std::path::PathBuf::from("test.docx"));
+        h.state_mut().session.path = p.clone();
+        h.state_mut().autosave_path = p;
+        h.state_mut().autosave = true;
+        h.step();
+        let autosave_on = h.get_by_role_and_label(Role::CheckBox, "AutoSave");
+        assert_eq!(autosave_on.accesskit_node().toggled(), Some(egui::accesskit::Toggled::True));
     }
 
     /// #1015: focusing Save is not enough: its dialog must expose the question and any failed

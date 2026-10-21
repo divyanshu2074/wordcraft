@@ -289,7 +289,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                 let label = if block.is_some() { t.text_dim.gamma_multiply(0.6) } else { t.text_dim };
                 ui.label(egui::RichText::new(tl!("AutoSave")).font(regular(11.5)).color(label));
                 let (r, resp) = ui.allocate_exact_size(vec2(30.0, 16.0), Sense::click());
-                resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Checkbox, ui.is_enabled(), tl!("AutoSave")));
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), on, tl!("AutoSave")));
                 let (fill, stroke, knob_fill) = match (&block, on) {
                     (Some(_), _) => (t.input.gamma_multiply(0.5), t.border.gamma_multiply(0.7), t.text_dim.gamma_multiply(0.45)),
                     (None, true) => (t.accent, t.accent, t.on_accent),
