@@ -577,9 +577,17 @@ fn convert_chars(src: &str, turkic: &[bool], mode: &str, para_start: bool) -> Ve
     // Greek capital sigma lowers to the final form at the end of a word (as `str::to_lowercase`).
     let lower = |i: usize, c: char| -> String {
         let tr = is_tr(i);
-        let prev = i.checked_sub(1).and_then(|j| chars.get(j)).is_some_and(|p| p.is_alphabetic());
-        let next = chars.get(i + 1).is_some_and(|n| n.is_alphabetic());
-        if !tr && c == 'Σ' && prev && !next { "ς".to_string() } else { super::tools::lower_char(c, tr) }
+        if tr {
+            match c {
+                'I' => "\u{131}".to_string(),
+                '\u{130}' => "i".to_string(),
+                _ => c.to_lowercase().collect(),
+            }
+        } else {
+            let prev = i.checked_sub(1).and_then(|j| chars.get(j)).is_some_and(|p| p.is_alphabetic());
+            let next = chars.get(i + 1).is_some_and(|n| n.is_alphabetic());
+            if c == 'Σ' && prev && !next { "ς".to_string() } else { c.to_lowercase().collect() }
+        }
     };
     // Title case capitalises the first word of any selection; sentence case only at a paragraph start.
     let mut up = mode == "title" || para_start;

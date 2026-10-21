@@ -1021,10 +1021,10 @@ pub(crate) fn upper_char(c: char, turkic: bool) -> String {
 
 /// A letter in lowercase: `I` → `ı` in Turkic languages. `İ` is always the single letter `i`,
 /// never `i` plus a combining dot.
-pub(crate) fn lower_char(c: char, turkic: bool) -> String {
+fn lower_char(c: char, turkic: bool) -> String {
     match c {
         'I' if turkic => "\u{131}".to_string(),
-        '\u{130}' if turkic => "i".to_string(),
+        '\u{130}' => "i".to_string(),
         _ => c.to_lowercase().collect(),
     }
 }
